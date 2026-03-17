@@ -244,7 +244,12 @@ class Workspace:
             ip.Completer.greedy = True
 
     @classmethod
-    def open(cls, workspace_id: WorkspaceId = None, direct: bool = False) -> Workspace:
+    def open(
+        cls,
+        workspace_id: WorkspaceId = None,
+        tcp: bool = False,
+        direct: bool = False,
+    ) -> Workspace:
         if direct and not sys.stdin.isatty():
             stdout = sys.stdout
             sys.stdout = sys.stderr
@@ -253,7 +258,7 @@ class Workspace:
 
         if workspace_id not in _open_workspaces:
             try:
-                channel_class = create_channel_class()
+                channel_class = create_channel_class(tcp)
                 channel = channel_class(workspace_id)
             except FileNotFoundError:
                 raise RuntimeError("No server found. Is it running?") from None

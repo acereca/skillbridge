@@ -181,9 +181,9 @@ class TcpChannel(Channel):
                 break
 
 
-if platform == 'win32':
+def create_channel_class(tcp: bool = False) -> type[TcpChannel]:
+    if platform == 'win32' or tcp:
 
-    def create_channel_class() -> type[TcpChannel]:
         class WindowsChannel(TcpChannel):
             def configure(self, sock: socket) -> None:
                 try:
@@ -200,22 +200,19 @@ if platform == 'win32':
 
             @staticmethod
             def create_address(id_: Any) -> Any:
-                port = 7777 if id_ is None else id_
+                port = 7777 if id_ is None else int(id_)
                 return 'localhost', port
 
         return WindowsChannel
 
-else:
+    from socket import AF_UNIX  # noqa: PLC0415
 
-    def create_channel_class() -> type[TcpChannel]:
-        from socket import AF_UNIX  # noqa: PLC0415
+    class UnixChannel(TcpChannel):
+        address_family = AF_UNIX
 
-        class UnixChannel(TcpChannel):
-            address_family = AF_UNIX
+        @staticmethod
+        def create_address(id_: Any) -> Any:
+            id_ = 'default' if id_ is None else id_
+            return f'/tmp/skill-server-{id_}.sock'
 
-            @staticmethod
-            def create_address(id_: Any) -> Any:
-                id_ = 'default' if id_ is None else id_
-                return f'/tmp/skill-server-{id_}.sock'
-
-        return UnixChannel
+    return UnixChannel
