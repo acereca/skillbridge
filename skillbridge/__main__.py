@@ -29,11 +29,11 @@ def deprecated_command() -> None:  # pragma: no cover
     print("You don't have to do anything")
 
 
-def shell_command(ws_id: str | None, ping: bool) -> None:
+def shell_command(ws_id: str | None, ping: bool, tcp: bool) -> None:
     import skillbridge  # noqa: PLC0415
 
     variables = {name: getattr(skillbridge, name) for name in dir(skillbridge)}
-    ws = skillbridge.Workspace.open(ws_id)
+    ws = skillbridge.Workspace.open(ws_id, tcp=tcp)
     variables['ws'] = ws
 
     if ping:
@@ -57,6 +57,7 @@ def main() -> None:
 
     shell = sub.add_parser('shell', help="opens a python interpreter with a connected workspace")
     shell.add_argument('-i', '--id', help="id used to open the workspace", default=None)
+    shell.add_argument('--tcp', help="if tcp sockets should be used", action='store_true')
     shell.add_argument(
         '-p',
         '--ping',
@@ -80,7 +81,7 @@ def main() -> None:
         'generate': (generate, generate_static_completion),
         'export': (export, deprecated_command),
         'import': (imp, deprecated_command),
-        'shell': (shell, lambda: shell_command(args.id, args.ping)),
+        'shell': (shell, lambda: shell_command(args.id, args.ping, args.tcp)),
     }
 
     sub_parser, func = commands[args.command]
