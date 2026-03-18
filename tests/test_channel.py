@@ -1,8 +1,8 @@
 from __future__ import annotations
 
-from collections.abc import Iterable, Iterator
 import contextlib
 import warnings
+from collections.abc import Iterable, Iterator
 from pathlib import Path
 
 from _pytest.fixtures import SubRequest
@@ -72,7 +72,6 @@ def _ws(use_tcp: bool) -> Iterator[Workspace]:
             break
     else:
         raise RuntimeError
-    print(ws)
     yield ws
 
     ws.close()
@@ -86,7 +85,6 @@ def ws(request) -> Iterable[Workspace]:
 
 @fixture(params=[False, True], ids=["unix", "tcp"])
 def server_ws_pair(request: SubRequest) -> Iterable[tuple[Virtuoso, Workspace]]:
-    print(request.param_index, request.param)
     with _server(request.param) as s, _ws(request.param) as w:
         yield s, w
 
@@ -171,7 +169,6 @@ def test_workspace_contains_prefixes(server_ws_pair: tuple[Virtuoso, Workspace])
 
 def test_function_call_is_send(server_ws_pair: tuple[Virtuoso, Workspace]):
     server, ws = server_ws_pair
-    print(server, ws)
     server.answer_success('1')
     cell = ws.ge.get_edit_cell_view()
 
@@ -295,14 +292,14 @@ def test_object_equality(server_ws_pair: tuple[Virtuoso, Workspace]):
 
 
 def test_fix_completion_does_not_raise(server_ws_pair: tuple[Virtuoso, Workspace]):
-    server, ws = server_ws_pair
+    _server, ws = server_ws_pair
     ws.fix_completion()
 
 
 def test_max_transmission_length_is_honored(server_ws_pair: tuple[Virtuoso, Workspace]):
     _server, ws = server_ws_pair
-    with raises(ValueError, match='max transmission'):
-        ws._channel.send('x' * 2_000_000)
+    with raises(ValueError, match="max transmission"):
+        ws._channel.send("x" * 2_000_000)
 
     ws.max_transmission_length = 100
     assert ws.max_transmission_length == 100
@@ -313,12 +310,12 @@ def test_max_transmission_length_is_honored(server_ws_pair: tuple[Virtuoso, Work
 
 
 def test_flush_does_no_harm(server_ws_pair: tuple[Virtuoso, Workspace]):
-    server, ws = server_ws_pair
+    _server, ws = server_ws_pair
     ws.flush()
 
 
 def test_make_workspace_current(server_ws_pair: tuple[Virtuoso, Workspace]):
-    server, ws = server_ws_pair
+    _server, ws = server_ws_pair
     assert not current_workspace.is_current
     assert not ws.is_current
 
@@ -486,17 +483,17 @@ def test_raw_object_access(server_ws_pair: tuple[Virtuoso, Workspace]):
     server.answer_success('123')
     i = x.abc_def
     assert i == 123
-    assert server.last_question == '__py_object_22->abcDef'
+    assert server.last_question == "__py_object_22->abcDef"
 
     server.answer_success('234')
     i = x['abc_def']
     assert i == 234
-    assert server.last_question == '__py_object_22->abc_def'
+    assert server.last_question == "__py_object_22->abc_def"
 
     server.answer_success('True')
     x.abc_def = 345
-    assert server.last_question == '__py_object_22->abcDef = 345'
+    assert server.last_question == "__py_object_22->abcDef = 345"
 
     server.answer_success('True')
     x['abc_def'] = 456
-    assert server.last_question == '__py_object_22->abc_def = 456'
+    assert server.last_question == "__py_object_22->abc_def = 456"

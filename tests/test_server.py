@@ -3,13 +3,12 @@ from pathlib import Path
 from threading import Thread
 from time import sleep
 
-from _pytest.fixtures import TopRequest
 from pytest import fixture, mark
 
 from skillbridge.client.channel import create_channel_class
 from skillbridge.server import python_server
 
-WORKSPACE_ID = "23210"
+WORKSPACE_ID = '23210'
 channel_class = create_channel_class()
 tcp_channel_class = create_channel_class(force_tcp=True)
 
@@ -73,7 +72,7 @@ def test_server_notifies(redirect: Redirect, use_tcp: bool):
     s = Server(use_tcp=use_tcp)
     s.start()
     sleep(2)
-    assert redirect.pop() == "running", "Server didn't start in time"
+    assert redirect.pop() == 'running', "Server didn't start in time"
 
     c = (tcp_channel_class if use_tcp else channel_class)(WORKSPACE_ID)
     c.close()
@@ -88,9 +87,9 @@ def test_one_request(redirect: Redirect, use_tcp: bool):
     sleep(2)
 
     c = (tcp_channel_class if use_tcp else channel_class)(WORKSPACE_ID)
-    redirect.prepare("success pong")
-    response = c.send("ping")
-    assert response == "pong"
+    redirect.prepare('success pong')
+    response = c.send('ping')
+    assert response == 'pong'
 
     c.close()
     s.join(0.1)
