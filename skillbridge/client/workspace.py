@@ -15,7 +15,7 @@ from .hints import Function, Symbol
 from .objects import RemoteObject, RemoteTable, RemoteVector
 from .translator import DefaultTranslator, Translator, camel_to_snake, snake_to_camel
 
-__all__ = ['Workspace', 'current_workspace']
+__all__ = ["Workspace", "current_workspace"]
 
 WorkspaceId = Union[str, int, None]
 _open_workspaces: dict[WorkspaceId, Workspace] = {}
@@ -32,12 +32,12 @@ class _NoWorkspace:
         raise RuntimeError("No Workspace made current")
 
 
-_no_workspace = cast('Workspace', _NoWorkspace())
+_no_workspace = cast("Workspace", _NoWorkspace())
 current_workspace: Workspace
 current_workspace = _no_workspace
 
 
-_unbound = Symbol('unbound')
+_unbound = Symbol("unbound")
 
 
 class Workspace:
@@ -190,11 +190,11 @@ class Workspace:
             value = FunctionCollection(channel, key, self._translator)
             setattr(self, key, value)
 
-        self.user = FunctionCollection(channel, 'user', self._translator)
+        self.user = FunctionCollection(channel, "user", self._translator)
 
     def _prepare_default_translator(self) -> DefaultTranslator:
         translator = DefaultTranslator()
-        types = [('Remote', RemoteObject), ('Table', RemoteTable), ('Vector', RemoteVector)]
+        types = [("Remote", RemoteObject), ("Table", RemoteTable), ("Vector", RemoteVector)]
 
         for name, typ in types:
             construct = partial(typ, self._channel, translator)
@@ -203,12 +203,12 @@ class Workspace:
         return translator
 
     def make_table(self, name: str, default: Any = _unbound) -> RemoteTable:
-        t = self['makeTable'](name, default)
+        t = self["makeTable"](name, default)
         assert isinstance(t, RemoteTable)
         return t
 
     def make_vector(self, length: int, default: Any = _unbound) -> RemoteVector:
-        v = self['makeVector'](length, default)
+        v = self["makeVector"](length, default)
         assert isinstance(v, RemoteVector)
         return v
 
@@ -226,12 +226,12 @@ class Workspace:
         self._channel.flush()
 
     def define(self, name: str, args: Iterable[str], code: str) -> None:
-        code = code.replace('\n', ' ')
+        code = code.replace("\n", " ")
         skill_name = snake_to_camel(name)
         skill_name = skill_name[0].upper() + skill_name[1:]
-        arg_list = ' '.join(snake_to_camel(arg) for arg in args)
-        code = f'defun(user{skill_name} ({arg_list}) {code})'
-        cast('Symbol', self._translator.decode(self._channel.send(code)))
+        arg_list = " ".join(snake_to_camel(arg) for arg in args)
+        code = f"defun(user{skill_name} ({arg_list}) {code})"
+        cast("Symbol", self._translator.decode(self._channel.send(code)))
 
     @staticmethod
     def fix_completion() -> None:
@@ -251,6 +251,15 @@ class Workspace:
         *,
         force_tcp: bool = False,
     ) -> Workspace:
+        """
+        Establish a Workspace connection
+
+        Args:
+            workspace_id: id/port to use for communication between server and client.
+                (needs to be numeric and between 0 and 65535, when using TCP sockets)
+            direct: use direct communication mode
+            force_tcp: use TCP sockets on UNIX Systems (incompatible with ``direct``)
+        """
         if force_tcp and direct:
             raise RuntimeError("tcp flag in conflict with direct mode")
 
@@ -280,7 +289,7 @@ class Workspace:
         _open_workspaces.pop(self.id, None)
 
         if current_workspace.id == self.id:
-            current_workspace.__class__ = cast('type[Workspace]', _NoWorkspace)
+            current_workspace.__class__ = cast("type[Workspace]", _NoWorkspace)
             current_workspace.__dict__ = {}
 
     @property
@@ -306,7 +315,7 @@ class Workspace:
             if p.default is p.empty:
                 param = p.name
 
-                param = f'    {param}'
+                param = f"    {param}"
             else:
                 param = f"    [ ?{p.default} {p.name} ]"
 
@@ -319,7 +328,7 @@ class Workspace:
             "",
         ]
 
-        doc_string = '\n'.join(doc) + dedent(function.__doc__)
+        doc_string = "\n".join(doc) + dedent(function.__doc__)
 
         return Function(snake_to_camel(function.__name__), doc_string, set())
 
@@ -328,7 +337,7 @@ class Workspace:
         name = camel_to_snake(function.__name__)
 
         try:
-            prefix, _ = name.split('_', maxsplit=1)
+            prefix, _ = name.split("_", maxsplit=1)
         except ValueError:
             raise RuntimeError("Function does not have a prefix.") from None
 
