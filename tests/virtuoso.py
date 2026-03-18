@@ -10,17 +10,18 @@ from skillbridge.server import python_server
 
 
 class Virtuoso(Thread):
-    def __init__(self, socket) -> None:
+    def __init__(self, workspace_id: str, force_tcp: bool = False) -> None:
         super().__init__(daemon=True)
         self.daemon = True
 
+        self.force_tcp = force_tcp
         self.queue = Queue()
         self.questions = []
         self.should_run = True
         self.server = None
         self.running = False
         self.pin = None
-        self.socket = socket
+        self.workspace_id = workspace_id
 
     def wait_until_ready(self):
         while not self.running:
@@ -30,18 +31,19 @@ class Virtuoso(Thread):
     def _create_subprocess(self):
         script = python_server.__file__
         master, slave = openpty()
+        force_args = ["--force-tcp"] if self.force_tcp else []
         self.server = Popen(
-            [executable, script, self.socket, "DEBUG", '--notify'],
+            [executable, script, self.workspace_id, "DEBUG", "--notify", *force_args],
             stdin=slave,
             stdout=PIPE,
             stderr=STDOUT,
             universal_newlines=True,
         )
-        self.pin = fdopen(master, 'w')
+        self.pin = fdopen(master, "w")
 
     def _wait_for_notification(self):
         read = self.read()
-        assert read == 'running', f"expected 'running', got {self.server.stdout.read()}"
+        assert read == "running", f"expected 'running', got {self.server.stdout.read()}"
 
     def run(self):
         try:
@@ -83,7 +85,7 @@ class Virtuoso(Thread):
         return None
 
     def write(self, message):
-        self.pin.write(message + '\n')
+        self.pin.write(message + "\n")
 
     def stop(self):
         self.should_run = False
@@ -92,10 +94,10 @@ class Virtuoso(Thread):
         self.server.wait()
 
     def answer_with(self, status, message):
-        self.queue.put(status + ' ' + message)
+        self.queue.put(status + " " + message)
 
     def answer_success(self, message):
-        self.answer_with('success', message)
+        self.answer_with("success", message)
 
     def answer_object(self, type_, address, object_type=()):
         self.answer_success(f'Remote("__py_{type_}_{address}")')
@@ -103,7 +105,7 @@ class Virtuoso(Thread):
             self.answer_success(repr(object_type))
 
     def answer_failure(self, message):
-        self.answer_with('failure', message)
+        self.answer_with("failure", message)
 
     @property
     def last_question(self):

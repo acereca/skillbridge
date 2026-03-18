@@ -3,13 +3,15 @@ from pathlib import Path
 from threading import Thread
 from time import sleep
 
-from pytest import fixture
+from _pytest.fixtures import TopRequest
+from pytest import fixture, mark
 
 from skillbridge.client.channel import create_channel_class
 from skillbridge.server import python_server
 
-WORKSPACE_ID = '__test2__'
+WORKSPACE_ID = "23210"
 channel_class = create_channel_class()
+tcp_channel_class = create_channel_class(force_tcp=True)
 
 
 class Redirect:
@@ -34,8 +36,9 @@ class Redirect:
 
 
 class Server(Thread):
-    def __init__(self) -> None:
+    def __init__(self, use_tcp: bool = False) -> None:
         super().__init__(daemon=True)
+        self.use_tcp = use_tcp
 
     def run(self):
         co = python_server.main(
@@ -44,7 +47,7 @@ class Server(Thread):
             notify=True,
             single=False,
             timeout=None,
-            force_tcp=False,
+            force_tcp=self.use_tcp,
         )
         asyncio.run(co)
 
@@ -62,30 +65,32 @@ def redirect():
     finally:
         python_server.send_to_skill = send
         python_server.read_from_skill = read
-        Path(channel_class.create_address(WORKSPACE_ID)).unlink()
+        Path(channel_class.create_address(WORKSPACE_ID)).unlink(missing_ok=True)
 
 
-def test_server_notifies(redirect: Redirect):
-    s = Server()
+@mark.parametrize("use_tcp", argvalues=[False, True], ids=["unix", "tcp"])
+def test_server_notifies(redirect: Redirect, use_tcp: bool):
+    s = Server(use_tcp=use_tcp)
     s.start()
     sleep(2)
-    assert redirect.pop() == 'running', "Server didn't start in time"
+    assert redirect.pop() == "running", "Server didn't start in time"
 
-    c = channel_class(WORKSPACE_ID)
+    c = (tcp_channel_class if use_tcp else channel_class)(WORKSPACE_ID)
     c.close()
 
     s.join(0.1)
 
 
-def test_one_request(redirect: Redirect):
-    s = Server()
+@mark.parametrize("use_tcp", argvalues=[False, True], ids=["unix", "tcp"])
+def test_one_request(redirect: Redirect, use_tcp: bool):
+    s = Server(use_tcp=use_tcp)
     s.start()
     sleep(2)
 
-    c = channel_class(WORKSPACE_ID)
-    redirect.prepare('success pong')
-    response = c.send('ping')
-    assert response == 'pong'
+    c = (tcp_channel_class if use_tcp else channel_class)(WORKSPACE_ID)
+    redirect.prepare("success pong")
+    response = c.send("ping")
+    assert response == "pong"
 
     c.close()
     s.join(0.1)
