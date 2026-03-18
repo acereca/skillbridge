@@ -10,7 +10,6 @@ from pathlib import Path
 from select import select
 from socketserver import (
     BaseRequestHandler,
-    BaseServer,
     StreamRequestHandler,
     TCPServer,
     ThreadingMixIn,
@@ -18,7 +17,6 @@ from socketserver import (
 )
 from sys import argv, platform, stderr, stdin, stdout
 from sys import exit as sys_exit
-from typing import TypeVar
 
 LOG_DIRECTORY = Path(getenv('SKILLBRIDGE_LOG_DIRECTORY', '.'))
 LOG_FILE = LOG_DIRECTORY / 'skillbridge_server.log'
@@ -52,7 +50,7 @@ def read_from_skill(timeout: float | None, force_tcp: bool) -> str:
 
 
 class SingleTcpServer(TCPServer):
-    skill_timeout: float = 0
+    skill_timeout: float | None = None
     request_queue_size: int = 0
     allow_reuse_address: bool = True
     active: bool = False
@@ -90,7 +88,7 @@ def data_tcp_ready(timeout: float | None) -> bool:
 
 
 class SingleUnixServer(UnixStreamServer):
-    skill_timeout: float = 0
+    skill_timeout: float | None = None
     request_queue_size: int = 0
     allow_reuse_address: bool = True
 
@@ -117,11 +115,9 @@ def data_unix_ready(timeout: float | None) -> bool:
     return bool(readable)
 
 
-ST = TypeVar("ST", bound=BaseServer)
-
-
 class Handler(StreamRequestHandler):
     server: SingleTcpServer | SingleUnixServer
+    reject: bool = False
 
     def receive_all(self, remaining: int) -> Iterable[bytes]:
         while remaining:
@@ -150,7 +146,7 @@ class Handler(StreamRequestHandler):
         logger.debug("sent data to skill")
         result = read_from_skill(
             self.server.skill_timeout,
-            isinstance(self.server, TCPServer),
+            isinstance(self.server, SingleTcpServer),
         ).encode()
         logger.debug(f"got response from skill {result[:1000]!r}")
 
@@ -206,7 +202,7 @@ def main(
     server_class = create_server_class(single)
 
     with server_class(id_, Handler) as server:
-        server.skill_timeout = timeout or 0
+        server.skill_timeout = timeout
         logger.info(
             f"starting server id={id_} log={log_level} {notify=} {single=} {timeout=} {force_tcp=}",
         )

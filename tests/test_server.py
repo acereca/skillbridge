@@ -38,7 +38,14 @@ class Server(Thread):
         super().__init__(daemon=True)
 
     def run(self):
-        co = python_server.main(WORKSPACE_ID, "DEBUG", notify=True, single=False, timeout=None)
+        co = python_server.main(
+            WORKSPACE_ID,
+            "DEBUG",
+            notify=True,
+            single=False,
+            timeout=None,
+            force_tcp=False,
+        )
         asyncio.run(co)
 
 
@@ -49,7 +56,7 @@ def redirect():
 
     r = Redirect()
     python_server.send_to_skill = r.write
-    python_server.read_from_skill = r.read
+    python_server.read_from_skill = lambda timeout, _force_tcp: r.read(timeout)
     try:
         yield r
     finally:
@@ -58,7 +65,7 @@ def redirect():
         Path(channel_class.create_address(WORKSPACE_ID)).unlink()
 
 
-def test_server_notifies(redirect):
+def test_server_notifies(redirect: Redirect):
     s = Server()
     s.start()
     sleep(2)
@@ -70,7 +77,7 @@ def test_server_notifies(redirect):
     s.join(0.1)
 
 
-def test_one_request(redirect):
+def test_one_request(redirect: Redirect):
     s = Server()
     s.start()
     sleep(2)
