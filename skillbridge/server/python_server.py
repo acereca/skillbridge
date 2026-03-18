@@ -18,10 +18,10 @@ from socketserver import (
 from sys import argv, platform, stderr, stdin, stdout
 from sys import exit as sys_exit
 
-LOG_DIRECTORY = Path(getenv('SKILLBRIDGE_LOG_DIRECTORY', '.'))
-LOG_FILE = LOG_DIRECTORY / 'skillbridge_server.log'
-LOG_FORMAT = '%(asctime)s %(levelname)s %(message)s'
-LOG_DATE_FORMAT = '%d.%m.%Y %H:%M:%S'
+LOG_DIRECTORY = Path(getenv("SKILLBRIDGE_LOG_DIRECTORY", "."))
+LOG_FILE = LOG_DIRECTORY / "skillbridge_server.log"
+LOG_FORMAT = "%(asctime)s %(levelname)s %(message)s"
+LOG_DATE_FORMAT = "%d.%m.%Y %H:%M:%S"
 LOG_LEVEL = WARNING
 
 basicConfig(filename=LOG_FILE, format=LOG_FORMAT, datefmt=LOG_DATE_FORMAT)
@@ -35,7 +35,7 @@ def send_to_skill(data: str) -> None:
 
 
 def read_from_skill(timeout: float | None, force_tcp: bool) -> str:
-    if platform == 'win32' or force_tcp:
+    if platform == "win32" or force_tcp:
         data_ready = data_tcp_ready
     else:
         data_ready = data_unix_ready
@@ -46,7 +46,7 @@ def read_from_skill(timeout: float | None, force_tcp: bool) -> str:
         return stdin.readline()
 
     logger.debug("timeout")
-    return 'failure <timeout>'
+    return "failure <timeout>"
 
 
 class SingleTcpServer(TCPServer):
@@ -56,7 +56,7 @@ class SingleTcpServer(TCPServer):
     active: bool = False
 
     def __init__(self, port: str | int, handler: type[BaseRequestHandler]) -> None:
-        super().__init__(('localhost', int(port)), handler)
+        super().__init__(("localhost", int(port)), handler)
 
     def server_bind(self) -> None:
         try:
@@ -78,7 +78,6 @@ class ThreadingTcpServer(ThreadingMixIn, SingleTcpServer):
 
 
 def create_tcp_server_class(single: bool) -> type[SingleTcpServer]:
-
     return SingleTcpServer if single else ThreadingTcpServer
 
 
@@ -93,7 +92,7 @@ class SingleUnixServer(UnixStreamServer):
     allow_reuse_address: bool = True
 
     def __init__(self, file: str, handler: type[BaseRequestHandler]) -> None:
-        self.path = f'/tmp/skill-server-{file}.sock'
+        self.path = f"/tmp/skill-server-{file}.sock"
         with contextlib.suppress(FileNotFoundError):
             Path(self.path).unlink()
 
@@ -105,7 +104,6 @@ class ThreadingUnixServer(ThreadingMixIn, SingleUnixServer):
 
 
 def create_unix_server_class(single: bool) -> type[SingleUnixServer]:
-
     return SingleUnixServer if single else ThreadingUnixServer
 
 
@@ -133,11 +131,11 @@ class Handler(StreamRequestHandler):
         logger.debug(f"got length {length}")
 
         length = int(length)
-        command = b''.join(self.receive_all(length))
+        command = b"".join(self.receive_all(length))
 
         logger.debug(f"received {len(command)} bytes")
 
-        if command.startswith(b'$close'):
+        if command.startswith(b"$close"):
             logger.debug(f"client {self.client_address} disconnected")
             return False
         logger.debug(f"got data {command[:1000].decode()}")
@@ -150,7 +148,7 @@ class Handler(StreamRequestHandler):
         ).encode()
         logger.debug(f"got response from skill {result[:1000]!r}")
 
-        self.request.send(f'{len(result):10}'.encode())
+        self.request.send(f"{len(result):10}".encode())
         self.request.send(result)
         logger.debug("sent response to client")
 
@@ -196,7 +194,7 @@ def main(
     logger.setLevel(getattr(logging, log_level))
 
     create_server_class = (
-        create_tcp_server_class if (platform == 'win32') or force_tcp else create_unix_server_class
+        create_tcp_server_class if (platform == "win32") or force_tcp else create_unix_server_class
     )
 
     server_class = create_server_class(single)
@@ -207,23 +205,23 @@ def main(
             f"starting server id={id_} log={log_level} {notify=} {single=} {timeout=} {force_tcp=}",
         )
         if notify:
-            send_to_skill('running')
+            send_to_skill("running")
         server.serve_forever()
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     log_levels = ["DEBUG", "WARNING", "INFO", "ERROR", "CRITICAL", "FATAL"]
     argument_parser = ArgumentParser(argv[0])
-    argument_parser.add_argument('id')
-    argument_parser.add_argument('log_level', choices=log_levels)
-    argument_parser.add_argument('--notify', action='store_true')
-    argument_parser.add_argument('--single', action='store_true')
-    argument_parser.add_argument('--timeout', type=float, default=None)
-    argument_parser.add_argument('--force-tcp', action='store_true')
+    argument_parser.add_argument("id")
+    argument_parser.add_argument("log_level", choices=log_levels)
+    argument_parser.add_argument("--notify", action="store_true")
+    argument_parser.add_argument("--single", action="store_true")
+    argument_parser.add_argument("--timeout", type=float, default=None)
+    argument_parser.add_argument("--force-tcp", action="store_true")
 
     ns = argument_parser.parse_args()
 
-    if platform == 'win32' and ns.timeout is not None:
+    if platform == "win32" and ns.timeout is not None:
         print("Timeout is not possible on Windows", file=stderr)
         sys_exit(1)
 

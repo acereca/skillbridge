@@ -333,7 +333,9 @@ class Workspace:
         return Function(snake_to_camel(function.__name__), doc_string, set())
 
     def register(self, function: Callable[..., Any]) -> Function:
-        warnings.warn("It is no longer necessary to register functions", DeprecationWarning)
+        warnings.warn(
+            "It is no longer necessary to register functions", DeprecationWarning
+        )
         name = camel_to_snake(function.__name__)
 
         try:

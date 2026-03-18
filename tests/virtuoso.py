@@ -26,7 +26,9 @@ class Virtuoso(Thread):
     def wait_until_ready(self):
         while not self.running:
             if not self.should_run:
-                raise RuntimeError(f"could not start server:\n {self.server.stdout.read()}")
+                raise RuntimeError(
+                    f"could not start server:\n {self.server.stdout.read()}"
+                )
 
     def _create_subprocess(self):
         script = python_server.__file__
