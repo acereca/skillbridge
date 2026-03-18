@@ -51,11 +51,8 @@ def read_from_skill(timeout: float | None, force_tcp: bool) -> str:
     return 'failure <timeout>'
 
 
-class SkillServer:
+class SingleTcpServer(TCPServer):
     skill_timeout: float = 0
-
-
-class SingleWindowsServer(TCPServer, SkillServer):
     request_queue_size: int = 0
     allow_reuse_address: bool = True
     active: bool = False
@@ -78,13 +75,13 @@ class SingleWindowsServer(TCPServer, SkillServer):
         super().server_bind()
 
 
-class ThreadingWindowsServer(ThreadingMixIn, SingleWindowsServer):
+class ThreadingTcpServer(ThreadingMixIn, SingleTcpServer):
     pass
 
 
-def create_tcp_server_class(single: bool) -> type[BaseServer]:
+def create_tcp_server_class(single: bool) -> type[SingleTcpServer]:
 
-    return SingleWindowsServer if single else ThreadingWindowsServer
+    return SingleTcpServer if single else ThreadingTcpServer
 
 
 def data_tcp_ready(timeout: float | None) -> bool:
@@ -92,9 +89,10 @@ def data_tcp_ready(timeout: float | None) -> bool:
     return True
 
 
-class SingleUnixServer(UnixStreamServer, SkillServer):
-    request_queue_size = 0
-    allow_reuse_address = True
+class SingleUnixServer(UnixStreamServer):
+    skill_timeout: float = 0
+    request_queue_size: int = 0
+    allow_reuse_address: bool = True
 
     def __init__(self, file: str, handler: type[BaseRequestHandler]) -> None:
         self.path = f'/tmp/skill-server-{file}.sock'
@@ -108,7 +106,7 @@ class ThreadingUnixServer(ThreadingMixIn, SingleUnixServer):
     pass
 
 
-def create_unix_server_class(single: bool) -> type[BaseServer]:
+def create_unix_server_class(single: bool) -> type[SingleUnixServer]:
 
     return SingleUnixServer if single else ThreadingUnixServer
 
@@ -123,6 +121,8 @@ ST = TypeVar("ST", bound=BaseServer)
 
 
 class Handler(StreamRequestHandler):
+    server: SingleTcpServer | SingleUnixServer
+
     def receive_all(self, remaining: int) -> Iterable[bytes]:
         while remaining:
             data = self.request.recv(remaining)
@@ -148,7 +148,6 @@ class Handler(StreamRequestHandler):
 
         send_to_skill(command.decode())
         logger.debug("sent data to skill")
-        assert isinstance(self.server, SkillServer)
         result = read_from_skill(
             self.server.skill_timeout,
             isinstance(self.server, TCPServer),
@@ -178,15 +177,15 @@ class Handler(StreamRequestHandler):
             client_is_connected = self.try_handle_one_request()
 
     def setup(self) -> None:
-        if isinstance(self.server, SingleWindowsServer) and self.server.active:
+        if isinstance(self.server, SingleTcpServer) and self.server.active:
             self.request.close()
             self.reject = True
-        elif isinstance(self.server, SingleWindowsServer):
+        elif isinstance(self.server, SingleTcpServer):
             self.server.active = True
             self.reject = False
 
     def finish(self) -> None:
-        if not self.reject and isinstance(self.server, SingleWindowsServer):
+        if not self.reject and isinstance(self.server, SingleTcpServer):
             self.server.active = False
 
 
@@ -200,18 +199,16 @@ def main(
 ) -> None:
     logger.setLevel(getattr(logging, log_level))
 
-    if platform == 'win32' or force_tcp:
-        create_server_class = create_tcp_server_class
-    else:
-        create_server_class = create_unix_server_class
+    create_server_class = (
+        create_tcp_server_class if (platform == 'win32') or force_tcp else create_unix_server_class
+    )
 
     server_class = create_server_class(single)
 
     with server_class(id_, Handler) as server:
-        server.skill_timeout = timeout  # type: ignore[attr-defined]
+        server.skill_timeout = timeout or 0
         logger.info(
-            f"starting server id={id_} log={log_level} notify={notify} "
-            f"single={single} timeout={timeout}",
+            f"starting server id={id_} log={log_level} {notify=} {single=} {timeout=} {force_tcp=}",
         )
         if notify:
             send_to_skill('running')
@@ -226,7 +223,7 @@ if __name__ == '__main__':
     argument_parser.add_argument('--notify', action='store_true')
     argument_parser.add_argument('--single', action='store_true')
     argument_parser.add_argument('--timeout', type=float, default=None)
-    argument_parser.add_argument('--tcp', action='store_true')
+    argument_parser.add_argument('--force-tcp', action='store_true')
 
     ns = argument_parser.parse_args()
 
@@ -235,4 +232,4 @@ if __name__ == '__main__':
         sys_exit(1)
 
     with contextlib.suppress(KeyboardInterrupt):
-        main(ns.id, ns.log_level, ns.notify, ns.single, ns.timeout, ns.tcp)
+        main(ns.id, ns.log_level, ns.notify, ns.single, ns.timeout, ns.force_tcp)

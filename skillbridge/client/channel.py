@@ -184,7 +184,7 @@ class TcpChannel(Channel):
 def create_channel_class(force_tcp: bool = False) -> type[TcpChannel]:
     if platform == 'win32' or force_tcp:
 
-        class WindowsChannel(TcpChannel):
+        class CustomTcpChannel(TcpChannel):
             def configure(self, sock: socket) -> None:
                 try:
                     from socket import (  # type: ignore[attr-defined]  # noqa: PLC0415
@@ -203,11 +203,11 @@ def create_channel_class(force_tcp: bool = False) -> type[TcpChannel]:
                 port = 7777 if id_ is None else int(id_)
                 return 'localhost', port
 
-        return WindowsChannel
+        return CustomTcpChannel
 
     from socket import AF_UNIX  # noqa: PLC0415
 
-    class UnixChannel(TcpChannel):
+    class CustomUnixChannel(TcpChannel):
         address_family = AF_UNIX
 
         @staticmethod
@@ -215,4 +215,4 @@ def create_channel_class(force_tcp: bool = False) -> type[TcpChannel]:
             id_ = 'default' if id_ is None else id_
             return f'/tmp/skill-server-{id_}.sock'
 
-    return UnixChannel
+    return CustomUnixChannel

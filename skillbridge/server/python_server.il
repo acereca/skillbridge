@@ -195,7 +195,7 @@ let((_filename _baseName _moduleFolder _logDirectory _executable _unbound)
     )
 
     putd('pyStartServer nil)
-    defun(pyStartServer (@key (id "default") (logLevel "INFO") (singleMode nil) (timeout nil) (python "python") (tcp nil) "ttggtg")
+    defun(pyStartServer (@key (id "default") (logLevel "INFO") (singleMode nil) (timeout nil) (python "python") (forceTcp nil) "ttggtg")
         if(pyStartServer.ipc then
             fprintf(stderr, "server is already running\n")
             nil
@@ -204,8 +204,8 @@ let((_filename _baseName _moduleFolder _logDirectory _executable _unbound)
                 if(singleMode then
                     executableWithArgs = lsprintf("%s --single" executableWithArgs)
                 )
-                if(tcp then
-                    executableWithArgs = lsprintf("%s --tcp" executableWithArgs)
+                if(forceTcp then
+                    executableWithArgs = lsprintf("%s --force-tcp" executableWithArgs)
                 )
                 if(timeout then
                     executableWithArgs = lsprintf("%s --timeout %L" executableWithArgs timeout)
