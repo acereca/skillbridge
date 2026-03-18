@@ -247,9 +247,13 @@ class Workspace:
     def open(
         cls,
         workspace_id: WorkspaceId = None,
-        tcp: bool = False,
         direct: bool = False,
+        *,
+        force_tcp: bool = False,
     ) -> Workspace:
+        if force_tcp and direct:
+            raise RuntimeError("tcp flag in conflict with direct mode")
+
         if direct and not sys.stdin.isatty():
             stdout = sys.stdout
             sys.stdout = sys.stderr
@@ -258,7 +262,7 @@ class Workspace:
 
         if workspace_id not in _open_workspaces:
             try:
-                channel_class = create_channel_class(tcp)
+                channel_class = create_channel_class(force_tcp)
                 channel = channel_class(workspace_id)
             except FileNotFoundError:
                 raise RuntimeError("No server found. Is it running?") from None

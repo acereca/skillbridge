@@ -36,8 +36,8 @@ def send_to_skill(data: str) -> None:
     stdout.flush()
 
 
-def read_from_skill(timeout: float | None, tcp: bool) -> str:
-    if platform == 'win32' or tcp:
+def read_from_skill(timeout: float | None, force_tcp: bool) -> str:
+    if platform == 'win32' or force_tcp:
         data_ready = data_tcp_ready
     else:
         data_ready = data_unix_ready
@@ -196,11 +196,11 @@ def main(
     notify: bool,
     single: bool,
     timeout: float | None,
-    tcp: bool,
+    force_tcp: bool,
 ) -> None:
     logger.setLevel(getattr(logging, log_level))
 
-    if platform == 'win32' or tcp:
+    if platform == 'win32' or force_tcp:
         create_server_class = create_tcp_server_class
     else:
         create_server_class = create_unix_server_class

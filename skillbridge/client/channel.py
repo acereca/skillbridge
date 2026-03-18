@@ -91,8 +91,8 @@ class TcpChannel(Channel):
     def create_socket(self) -> socket:
         return socket(self.address_family, self.socket_kind)
 
-    def configure(self, _: socket) -> None:
-        pass
+    def configure(self, sock: socket) -> None:
+        _ = sock
 
     def connect(self, sock: socket) -> socket:
         sock.settimeout(1)
@@ -181,8 +181,8 @@ class TcpChannel(Channel):
                 break
 
 
-def create_channel_class(tcp: bool = False) -> type[TcpChannel]:
-    if platform == 'win32' or tcp:
+def create_channel_class(force_tcp: bool = False) -> type[TcpChannel]:
+    if platform == 'win32' or force_tcp:
 
         class WindowsChannel(TcpChannel):
             def configure(self, sock: socket) -> None:
