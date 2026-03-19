@@ -93,8 +93,7 @@ class SingleUnixServer(UnixStreamServer):
 
     def __init__(self, file: str, handler: type[BaseRequestHandler]) -> None:
         self.path = f"/tmp/skill-server-{file}.sock"
-        with contextlib.suppress(FileNotFoundError):
-            Path(self.path).unlink()
+        Path(self.path).unlink(missing_ok=True)
 
         super().__init__(self.path, handler)
 
