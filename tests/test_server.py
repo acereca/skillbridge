@@ -1,5 +1,7 @@
-import asyncio
+from __future__ import annotations
+
 from pathlib import Path
+from socketserver import TCPServer
 from threading import Thread
 from time import sleep
 
@@ -36,19 +38,30 @@ class Redirect:
 
 class Server(Thread):
     def __init__(self, use_tcp: bool = False) -> None:
-        super().__init__(daemon=True)
         self.use_tcp = use_tcp
+        self.server: TCPServer | None = None
+        super().__init__(daemon=True)
+
+    def start(self) -> None:
+        super().start()
 
     def run(self):
-        co = python_server.main(
+        with python_server.create_server(
             WORKSPACE_ID,
             "DEBUG",
-            notify=True,
             single=False,
             timeout=None,
             force_tcp=self.use_tcp,
-        )
-        asyncio.run(co)
+        ) as server:
+            print("HI FROM SERVER")
+            python_server.send_to_skill('running')
+            self.server = server
+            server.serve_forever()
+
+    def join(self, timeout: float | None = None) -> None:
+        if self.server:
+            self.server.shutdown()
+        return super().join(timeout)
 
 
 @fixture
@@ -58,7 +71,7 @@ def redirect():
 
     r = Redirect()
     python_server.send_to_skill = r.write
-    python_server.read_from_skill = lambda timeout, _force_tcp: r.read(timeout)
+    python_server.read_from_skill = r.read
     try:
         yield r
     finally:
@@ -77,7 +90,7 @@ def test_server_notifies(redirect: Redirect, use_tcp: bool):
     c = (tcp_channel_class if use_tcp else channel_class)(WORKSPACE_ID)
     c.close()
 
-    s.join(0.1)
+    s.join()
 
 
 @mark.parametrize("use_tcp", argvalues=[False, True], ids=["unix", "tcp"])
@@ -92,4 +105,4 @@ def test_one_request(redirect: Redirect, use_tcp: bool):
     assert response == 'pong'
 
     c.close()
-    s.join(0.1)
+    s.join()

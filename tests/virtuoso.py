@@ -84,7 +84,7 @@ class Virtuoso(Thread):
                 return self.server.stdout.readline().strip()
         return None
 
-    def write(self, message):
+    def write(self, message: str):
         self.pin.write(message + '\n')
 
     def stop(self):
@@ -93,18 +93,18 @@ class Virtuoso(Thread):
         self.server.kill()
         self.server.wait()
 
-    def answer_with(self, status, message):
+    def answer_with(self, status: str, message: str):
         self.queue.put(status + ' ' + message)
 
-    def answer_success(self, message):
+    def answer_success(self, message: str):
         self.answer_with('success', message)
 
-    def answer_object(self, type_, address, object_type=()):
+    def answer_object(self, type_: type, address: str, object_type: str = ()):
         self.answer_success(f'Remote("__py_{type_}_{address}")')
         if object_type != ():
             self.answer_success(repr(object_type))
 
-    def answer_failure(self, message):
+    def answer_failure(self, message: str):
         self.answer_with('failure', message)
 
     @property
