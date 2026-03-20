@@ -3,13 +3,13 @@ from __future__ import annotations
 import contextlib
 import logging
 from argparse import ArgumentParser
-from collections.abc import Iterable
+from collections.abc import Callable, Generator, Iterable
+from functools import partial
 from logging import WARNING, basicConfig, getLogger
 from os import getenv
 from pathlib import Path
 from select import select
 from socketserver import (
-    BaseRequestHandler,
     StreamRequestHandler,
     TCPServer,
     ThreadingMixIn,
@@ -17,6 +17,7 @@ from socketserver import (
 )
 from sys import argv, platform, stderr, stdin, stdout
 from sys import exit as sys_exit
+from typing import Any
 
 LOG_DIRECTORY = Path(getenv('SKILLBRIDGE_LOG_DIRECTORY', '.'))
 LOG_FILE = LOG_DIRECTORY / 'skillbridge_server.log'
@@ -34,13 +35,9 @@ def send_to_skill(data: str) -> None:
     stdout.flush()
 
 
-def read_from_skill(timeout: float | None, force_tcp: bool) -> str:
-    if platform == 'win32' or force_tcp:
-        data_ready = data_tcp_ready
-    else:
-        data_ready = data_unix_ready
+def read_from_skill(data_ready: Callable[[], bool]) -> str:
 
-    readable = data_ready(timeout)
+    readable = data_ready()
 
     if readable:
         return stdin.readline()
@@ -50,12 +47,11 @@ def read_from_skill(timeout: float | None, force_tcp: bool) -> str:
 
 
 class SingleTcpServer(TCPServer):
-    skill_timeout: float | None = None
     request_queue_size: int = 0
     allow_reuse_address: bool = True
     active: bool = False
 
-    def __init__(self, port: str | int, handler: type[BaseRequestHandler]) -> None:
+    def __init__(self, port: str | int, handler: type[StreamRequestHandler]) -> None:
         super().__init__(("localhost", int(port)), handler)
 
     def server_bind(self) -> None:
@@ -72,6 +68,18 @@ class SingleTcpServer(TCPServer):
             pass
         super().server_bind()
 
+    def verify_request(self, request: Any, client_address: Any) -> bool:
+        _ = request, client_address
+        if self.active:
+            return False
+
+        self.active = True
+        return True
+
+    def finish_request(self, request: Any, client_address: Any) -> None:
+        super().finish_request(request, client_address)
+        self.active = False
+
 
 class ThreadingTcpServer(ThreadingMixIn, SingleTcpServer):
     pass
@@ -81,21 +89,16 @@ def create_tcp_server_class(single: bool) -> type[SingleTcpServer]:
     return SingleTcpServer if single else ThreadingTcpServer
 
 
-def data_tcp_ready(timeout: float | None) -> bool:
-    _ = timeout
-    return True
-
-
 class SingleUnixServer(UnixStreamServer):
-    skill_timeout: float | None = None
     request_queue_size: int = 0
     allow_reuse_address: bool = True
 
-    def __init__(self, file: str, handler: type[BaseRequestHandler]) -> None:
-        self.path = f"/tmp/skill-server-{file}.sock"
-        Path(self.path).unlink(missing_ok=True)
+    def __init__(self, file: str, handler: type[StreamRequestHandler]) -> None:
 
-        super().__init__(self.path, handler)
+        path = f"/tmp/skill-server-{file}.sock"
+        Path(path).unlink(missing_ok=True)
+
+        super().__init__(path, handler)
 
 
 class ThreadingUnixServer(ThreadingMixIn, SingleUnixServer):
@@ -106,80 +109,93 @@ def create_unix_server_class(single: bool) -> type[SingleUnixServer]:
     return SingleUnixServer if single else ThreadingUnixServer
 
 
-def data_unix_ready(timeout: float | None) -> bool:
+def unix_data_ready(timeout: float | None) -> bool:
     readable, _, _ = select([stdin], [], [], timeout)
 
     return bool(readable)
 
 
-class Handler(StreamRequestHandler):
-    server: SingleTcpServer | SingleUnixServer
-    reject: bool = False
+def win_data_ready() -> bool:
+    return True
 
-    def receive_all(self, remaining: int) -> Iterable[bytes]:
-        while remaining:
-            data = self.request.recv(remaining)
-            remaining -= len(data)
-            yield data
 
-    def handle_one_request(self) -> bool:
-        length = self.request.recv(10)
-        if not length:
-            logger.warning(f"client {self.client_address} lost connection")
-            return False
-        logger.debug(f"got length {length}")
+def create_handler(
+    data_ready: Callable[[], bool],
+) -> type[StreamRequestHandler]:
 
-        length = int(length)
-        command = b''.join(self.receive_all(length))
+    class Handler(StreamRequestHandler):
+        def receive_all(self, remaining: int) -> Iterable[bytes]:
+            while remaining:
+                data = self.request.recv(remaining)
+                remaining -= len(data)
+                yield data
 
-        logger.debug(f"received {len(command)} bytes")
+        def handle_one_request(self) -> bool:
+            length = self.request.recv(10)
+            if not length:
+                logger.warning(f"client {self.client_address} lost connection")
+                return False
+            logger.debug(f"got length {length}")
 
-        if command.startswith(b'$close'):
-            logger.debug(f"client {self.client_address} disconnected")
-            return False
-        logger.debug(f"got data {command[:1000].decode()}")
+            length = int(length)
+            command = b''.join(self.receive_all(length))
 
-        send_to_skill(command.decode())
-        logger.debug("sent data to skill")
-        result = read_from_skill(
-            self.server.skill_timeout,
-            isinstance(self.server, SingleTcpServer),
-        ).encode()
-        logger.debug(f"got response from skill {result[:1000]!r}")
+            logger.debug(f"received {len(command)} bytes")
 
-        self.request.send(f'{len(result):10}'.encode())
-        self.request.send(result)
-        logger.debug("sent response to client")
+            if command.startswith(b'$close'):
+                logger.debug(f"client {self.client_address} disconnected")
+                return False
+            logger.debug(f"got data {command[:1000].decode()}")
 
-        return True
+            send_to_skill(command.decode())
+            logger.debug("sent data to skill")
+            result = read_from_skill(data_ready).encode()
+            logger.debug(f"got response from skill {result[:1000]!r}")
 
-    def try_handle_one_request(self) -> bool:
-        try:
-            return self.handle_one_request()
-        except Exception:
-            logger.exception("Failed to handle request")
-            return False
+            self.request.send(f'{len(result):10}'.encode())
+            self.request.send(result)
+            logger.debug("sent response to client")
 
-    def handle(self) -> None:
-        if self.reject:
-            return
+            return True
 
-        logger.info(f"client {self.client_address} connected")
-        client_is_connected = True
-        while client_is_connected:
-            client_is_connected = self.try_handle_one_request()
+        def try_handle_one_request(self) -> bool:
+            try:
+                return self.handle_one_request()
+            except Exception:
+                logger.exception("Failed to handle request")
+                return False
 
-    def setup(self) -> None:
-        if isinstance(self.server, SingleTcpServer) and self.server.active:
-            self.request.close()
-            self.reject = True
-        elif isinstance(self.server, SingleTcpServer):
-            self.server.active = True
-            self.reject = False
+        def handle(self) -> None:
+            logger.info(f"client {self.client_address} connected")
+            while self.try_handle_one_request():
+                pass
 
-    def finish(self) -> None:
-        if not self.reject and isinstance(self.server, SingleTcpServer):
-            self.server.active = False
+    return Handler
+
+
+@contextlib.contextmanager
+def create_server(
+    id_: str,
+    log_level: str,
+    single: bool,
+    timeout: float | None,
+    force_tcp: bool,
+) -> Generator[SingleTcpServer | SingleUnixServer, Any, None]:
+    logger.setLevel(getattr(logging, log_level))
+
+    serv_cls: type[SingleUnixServer | SingleTcpServer]
+
+    if platform == "win32":
+        serv_cls = create_tcp_server_class(single)
+        data_ready = win_data_ready
+    elif force_tcp:
+        serv_cls = create_tcp_server_class(single)
+        data_ready = partial(unix_data_ready, timeout)
+    else:
+        serv_cls = create_unix_server_class(single)
+        data_ready = partial(unix_data_ready, timeout)
+
+    yield serv_cls(id_, create_handler(data_ready))
 
 
 def main(
@@ -190,16 +206,8 @@ def main(
     timeout: float | None,
     force_tcp: bool,
 ) -> None:
-    logger.setLevel(getattr(logging, log_level))
 
-    create_server_class = (
-        create_tcp_server_class if (platform == "win32") or force_tcp else create_unix_server_class
-    )
-
-    server_class = create_server_class(single)
-
-    with server_class(id_, Handler) as server:
-        server.skill_timeout = timeout
+    with create_server(id_, log_level, single, timeout, force_tcp) as server:
         logger.info(
             f"starting server id={id_} log={log_level} {notify=} {single=} {timeout=} {force_tcp=}",
         )
