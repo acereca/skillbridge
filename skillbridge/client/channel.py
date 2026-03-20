@@ -6,6 +6,9 @@ from socket import AF_INET, SOCK_STREAM, socket
 from sys import platform
 from typing import Any, Iterable, TextIO
 
+PORT_RANGE_MIN = 0
+PORT_RANGE_MAX = 0xFFFF
+
 
 class Channel:
     def __init__(self, max_transmission_length: int) -> None:
@@ -199,9 +202,16 @@ def create_channel_class(force_tcp: bool = False) -> type[TcpChannel]:
                     pass
 
             @staticmethod
-            def create_address(id_: Any) -> Any:
-                port = 7777 if id_ is None else int(id_)
-                return 'localhost', port
+            def create_address(id_: str | None) -> tuple[str, int]:
+                if id_ is None:
+                    return 'localhost', 7777
+
+                if not (id_.isnumeric() and PORT_RANGE_MIN <= int(id_) <= PORT_RANGE_MAX):
+                    raise ValueError(
+                        f"TCP server requires a numeric id in range 0-65535 (given=`{id_}`)"
+                    )
+
+                return 'localhost', int(id_)
 
         return CustomTcpChannel
 
